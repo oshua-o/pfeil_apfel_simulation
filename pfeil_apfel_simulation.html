@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Pfeil‑Apfel‑Simulation – variable Diagrammgröße</title>
+<style>
+  body {font-family: Arial, sans-serif; margin:20px;}
+  .controls {margin-bottom:12px;}
+  .controls label {display:inline-block;width:130px;}
+  canvas {border:1px solid #aaa;background:#f9f9f9;}
+  #result {margin-top:10px;font-weight:bold;}
+</style>
+</head>
+<body>
+
+<h2>Pfeil‑Apfel‑Simulation (ohne Pistole oder Affe :D)</h2>
+
+<div class="controls">
+  <label for="v0">v₀ (m/s): </label>
+  <input type="range" id="v0" min="5" max="100" step="1" value="30">
+  <span id="v0Val">30</span>
+</div>
+
+<div class="controls">
+  <label for="h">h (m): </label>
+  <input type="range" id="h" min="0" max="50" step="0.5" value="10">
+  <span id="hVal">10</span>
+</div>
+
+<div class="controls">
+  <label for="d">d (m): </label>
+  <input type="range" id="d" min="5" max="200" step="1" value="80">
+  <span id="dVal">80</span>
+</div>
+
+<div class="controls">
+  <label for="size">Diagrammgröße: </label>
+  <select id="size">
+    <option value="large">großes Diagramm (100 m)</option>
+    <option value="small">kleines Diagramm (10 m)</option>
+  </select>
+</div>
+
+<canvas id="plot" width="820" height="460"></canvas>
+
+<div id="result"></div>
+
+<script>
+// ------------------------------------------------------------
+// Konstanten
+// ------------------------------------------------------------
+const g = 9.81;                 // Erdbeschleunigung (m/s²)
+
+// ------------------------------------------------------------
+// UI‑Elemente
+// ------------------------------------------------------------
+const v0Slider = document.getElementById('v0');
+const hSlider  = document.getElementById('h');
+const dSlider  = document.getElementById('d');
+const sizeSel  = document.getElementById('size');
+
+const v0Val = document.getElementById('v0Val');
+const hVal  = document.getElementById('hVal');
+const dVal  = document.getElementById('dVal');
+
+const canvas = document.getElementById('plot');
+const ctx    = canvas.getContext('2d');
+const resultDiv = document.getElementById('result');
+
+// ------------------------------------------------------------
+// Hilfsfunktionen
+// ------------------------------------------------------------
+function updateLabels(){
+  v0Val.textContent = v0Slider.value;
+  hVal.textContent  = hSlider.value;
+  dVal.textContent  = dSlider.value;
+}
+
+// Position des Pfeils zum Zeitpunkt t
+function arrowPos(t,v0,h){
+  return {x: v0*t, y: h - 0.5*g*t*t};
+}
+
+// Position des Apfels zum Zeitpunkt t (x = d)
+function applePos(t,d,h){
+  return {x: d, y: h - 0.5*g*t*t};
+}
+
+// Prüft, ob ein Treffer stattfindet
+function findImpact(v0,h,d){
+  const tHit = d / v0;
+  if (tHit < 0) return null;
+  const y = h - 0.5*g*tHit*tHit;
+  if (y >= 0) return {t:tHit, y:y};
+  return null;
+}
+
+// ------------------------------------------------------------
+// Zeichenfunktion
+// ------------------------------------------------------------
+function draw(){
+  const v0 = parseFloat(v0Slider.value);
+  const h  = parseFloat(hSlider.value);
+  const d  = parseFloat(dSlider.value);
+  const size = sizeSel.value;               // "large" oder "small"
+
+  // ------------------- Canvas leeren -----------------------
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // ------------------- Skalierung -------------------------
+  const margin = 60;                         // Platz für Achsenbeschriftungen
+  const plotW  = canvas.width  - 2*margin;
+  const plotH  = canvas.height - 2*margin;
+
+  // Maximale X‑Breite abhängig von Auswahl
+  const maxX = (size==="large") ? 100 : 10;   // 100 m bzw. 10 m
+  // Y‑Skala: etwas größer als die aktuelle Höhe, mindestens 10 m
+  const maxY = Math.max(h,10) * 1.2;
+
+  // Umrechnung Meter → Pixel
+  const toPxX = x => margin + (x/maxX)*plotW;
+  const toPxY = y => canvas.height - margin - (y/maxY)*plotH;
+
+  // ------------------- Achsen -----------------------------
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  // Y‑Achse
+  ctx.moveTo(margin,margin);
+  ctx.lineTo(margin,canvas.height-margin);
+  // X‑Achse
+  ctx.lineTo(canvas.width-margin,canvas.height-margin);
+  ctx.stroke();
+
+  // ------------------- Skalen (Ticks) --------------------
+  ctx.fillStyle = "#000";
+  ctx.font = "11px sans-serif";
+
+  // X‑Achse‑Ticks
+  const xStep = (size==="large") ? 10 : 1;   // 10 m‑ bzw. 1 m‑Schritte
+  for(let x=0;x<=maxX;x+=xStep){
+    const px = toPxX(x);
+    const tickHeight = (x % (2*xStep)===0) ? 10 : 5; // längere Hauptticks
+    ctx.beginPath();
+    ctx.moveTo(px,canvas.height-margin);
+    ctx.lineTo(px,canvas.height-margin+tickHeight);
+    ctx.stroke();
+    if (x % (2*xStep)===0){ // Beschriftung nur bei Hauptticks
+      ctx.fillText(x,px-4,canvas.height-margin+22);
+    }
+  }
+
+  // Y‑Achse‑Ticks (alle 5 m, angepasst an maxY)
+  const yStep = 5;
+  for(let y=0;y<=maxY;y+=yStep){
+    const py = toPxY(y);
+    const tickLen = (y % (2*yStep)===0) ? 10 : 5;
+    ctx.beginPath();
+    ctx.moveTo(margin-tickLen,py);
+    ctx.lineTo(margin,py);
+    ctx.stroke();
+    if (y % (2*yStep)===0){
+      ctx.fillText(y,margin-30,py+4);
+    }
+  }
+
+  // Achsenbeschriftungen
+  ctx.fillText("x (m)",canvas.width-margin-20,canvas.height-margin+35);
+  ctx.save();
+  ctx.translate(margin-45,margin+10);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillText("y (m)",0,0);
+  ctx.restore();
+
+  // ------------------- Pfeilkurve ------------------------
+  ctx.strokeStyle = "#0066ff";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  let first=true;
+  const dt=0.02;
+  for(let t=0;;t+=dt){
+    const p=arrowPos(t,v0,h);
+    if(p.y<0)break;
+    const px=toPxX(p.x);
+    const py=toPxY(p.y);
+    if(first){ctx.moveTo(px,py);first=false;}
+    else ctx.lineTo(px,py);
+  }
+  ctx.stroke();
+
+  // ------------------- Apfel (vertikale Linie) ---------
+  ctx.strokeStyle = "#ff6600";
+  ctx.setLineDash([5,5]);
+  ctx.beginPath();
+  ctx.moveTo(toPxX(d),toPxY(h));
+  ctx.lineTo(toPxX(d),toPxY(0));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // ------------------- Trefferprüfung -------------------
+  const impact=findImpact(v0,h,d);
+  if(impact){
+    const hx=toPxX(d);
+    const hy=toPxY(impact.y);
+    ctx.fillStyle="#00aa00";
+    ctx.beginPath();
+    ctx.arc(hx,hy,6,0,2*Math.PI);
+    ctx.fill();
+    resultDiv.textContent=`Der Pfeil trifft den Apfel in einer Höhe von ${impact.y.toFixed(2)} m.`;
+  }else{
+    resultDiv.textContent='Der Pfeil trifft schon vor dem Apfel auf den Boden.';
+  }
+}
+
+// ------------------------------------------------------------
+// Event‑Handler
+// ------------------------------------------------------------
+[v0Slider,hSlider,dSlider,sizeSel].forEach(el=>{
+  el.addEventListener('input',()=>{updateLabels();draw();});
+});
+
+// Initialisierung
+updateLabels();
+draw();
+</script>
+
+</body>
+</html>
